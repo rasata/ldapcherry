@@ -6,11 +6,9 @@
 
 Nice and simple application to manage users and groups in multiple directory services.
 
-.. image:: https://travis-ci.org/kakwa/ldapcherry.svg?branch=master
-    :target: https://travis-ci.org/kakwa/ldapcherry
-    
-.. image:: https://coveralls.io/repos/kakwa/ldapcherry/badge.svg 
-    :target: https://coveralls.io/r/kakwa/ldapcherry
+.. image:: https://github.com/kakwa/ldapcherry/actions/workflows/tests.yml/badge.svg
+    :target: https://github.com/kakwa/ldapcherry/actions/workflows/tests.yml
+    :alt: CI
     
 .. image:: https://img.shields.io/pypi/v/ldapcherry.svg
     :target: https://pypi.python.org/pypi/ldapcherry
@@ -90,7 +88,7 @@ The default backend plugins permit to manage Ldap and Active Directory.
     $ export DATAROOTDIR=/usr/share/
     
     # install ldapcherry
-    $ python setup.py
+    $ python setup.py install
 
     # edit configuration files
     $ vi /etc/ldapcherry/ldapcherry.ini
@@ -100,6 +98,8 @@ The default backend plugins permit to manage Ldap and Active Directory.
     # launch ldapcherry
     $ ldapcherryd -c /etc/ldapcherry/ldapcherry.ini -D
 
+
+Debian and RPM packages are also available here: `https://github.com/kakwa/kakwalab-pkg` (package name ``ldapcherry``).
 
 ***********
   License
@@ -111,7 +111,7 @@ LdapCherry is published under the MIT Public License.
   Discussion / Help / Updates
 *******************************
 
-* IRC: `Freenode <http://freenode.net/>`_ ``#ldapcherry`` channel
+* IRC: `Libera <https://libera.chat/>`_ ``#ldapcherry`` channel
 * Bugtracker: `Github <https://github.com/kakwa/ldapcherry/issues>`_
 
 ----

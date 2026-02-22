@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # vim:set expandtab tabstop=4 shiftwidth=4:
 #
@@ -8,6 +7,7 @@
 
 # Generic imports
 import sys
+import os
 import re
 import traceback
 import json
@@ -15,10 +15,8 @@ import logging
 import logging.handlers
 from operator import itemgetter
 from socket import error as socket_error
-import base64
-import cgi
 
-from exceptions import *
+from ldapcherry.exceptions import *
 from ldapcherry.lclogging import *
 from ldapcherry.roles import Roles
 from ldapcherry.attributes import Attributes
@@ -31,7 +29,13 @@ from cherrypy.lib.httputil import parse_query_string
 from mako.template import Template
 from mako import lookup
 from mako import exceptions
-from sets import Set
+
+
+if sys.version < '3':
+    from sets import Set as set
+    from urllib import quote_plus
+else:
+    from urllib.parse import quote_plus
 
 SESSION_KEY = '_cp_username'
 
@@ -55,36 +59,6 @@ class LdapCherry(object):
             severity=logging.DEBUG,
             traceback=True
             )
-
-    def _escape_list(self, data):
-        ret = []
-        for i in data:
-            ret.append(cgi.escape(i, True))
-        return ret
-
-    def _escape_dict(self, data):
-        for d in data:
-            if isinstance(data[d], list):
-                data[d] = self._escape_list(data[d])
-            elif isinstance(data[d], dict):
-                data[d] = self._escape_dict(data[d])
-            elif isinstance(data[d], Set):
-                data[d] = Set(self._escape_list(data[d]))
-            else:
-                data[d] = cgi.escape(data[d], True)
-        return data
-
-    def _escape(self, data, dtype):
-        if data is None:
-            return None
-        elif dtype == 'search_list':
-            for d in data:
-                data[d] = self._escape_dict(data[d])
-        elif dtype == 'attr_list':
-            data = self._escape_dict(data)
-        elif dtype == 'lonely_groups':
-            data = self._escape_dict(data)
-        return data
 
     def _get_param(self, section, key, config, default=None):
         """ Get configuration parameter "key" from config
@@ -144,10 +118,10 @@ class LdapCherry(object):
         backends = self.backends_params.keys()
         for b in self.roles.get_backends():
             if b not in backends:
-                raise MissingBackend(b)
-        for b in self.roles.get_backends():
+                raise MissingBackend(b, 'role')
+        for b in self.attributes.get_backends():
             if b not in backends:
-                raise MissingBackend(b)
+                raise MissingBackend(b, 'attribute')
 
     def _init_backends(self, config):
         """ Init all backends
@@ -168,7 +142,7 @@ class LdapCherry(object):
             try:
                 self.backends_display_names[backend] = \
                     self.backends_params[backend]['display_name']
-            except:
+            except Exception as e:
                 self.backends_display_names[backend] = backend
                 self.backends_params[backend]['display_name'] = backend
             params = self.backends_params[backend]
@@ -178,7 +152,7 @@ class LdapCherry(object):
             except Exception as e:
                 raise MissingParameter('backends', backend + '.module')
             try:
-                bc = __import__(module, globals(), locals(), ['Backend'], -1)
+                bc = __import__(module, globals(), locals(), ['Backend'], 0)
             except Exception as e:
                 self._handle_exception(e)
                 raise BackendModuleLoadingFail(module)
@@ -187,7 +161,7 @@ class LdapCherry(object):
                 key = self.attributes.get_backend_key(backend)
                 self.backends[backend] = bc.Backend(
                     params,
-                    cherrypy.log,
+                    cherrypy.log.error,
                     backend,
                     attrslist,
                     key,
@@ -219,8 +193,8 @@ class LdapCherry(object):
             'ldapcherry.ppolicy'
         )
         try:
-            pp = __import__(module, globals(), locals(), ['PPolicy'], -1)
-        except:
+            pp = __import__(module, globals(), locals(), ['PPolicy'], 0)
+        except Exception as e:
             raise BackendModuleLoadingFail(module)
         if 'ppolicy' in config:
             ppcfg = config['ppolicy']
@@ -238,7 +212,7 @@ class LdapCherry(object):
         elif self.auth_mode == 'custom':
             # load custom auth module
             auth_module = self._get_param('auth', 'auth.module', config)
-            auth = __import__(auth_module, globals(), locals(), ['Auth'], -1)
+            auth = __import__(auth_module, globals(), locals(), ['Auth'], 0)
             self.auth = auth.Auth(config['auth'], cherrypy.log)
         else:
             raise WrongParamValue(
@@ -279,6 +253,15 @@ class LdapCherry(object):
             handler.setFormatter(syslog_formatter)
             cherrypy.log.access_log.addHandler(handler)
 
+        # if stdout, open a logger on stdout
+        elif access_handler == 'stdout':
+            cherrypy.log.access_log.handlers = []
+            handler = logging.StreamHandler(sys.stdout)
+            formatter = logging.Formatter(
+                'ldapcherry.access - %(levelname)s - %(message)s'
+            )
+            handler.setFormatter(formatter)
+            cherrypy.log.access_log.addHandler(handler)
         # if file, we keep the default
         elif access_handler == 'file':
             pass
@@ -324,6 +307,15 @@ class LdapCherry(object):
             handler.setFormatter(syslog_formatter)
             cherrypy.log.error_log.addHandler(handler)
 
+        # if stdout, open a logger on stdout
+        elif error_handler == 'stdout':
+            cherrypy.log.error_log.handlers = []
+            handler = logging.StreamHandler(sys.stdout)
+            formatter = logging.Formatter(
+                'ldapcherry.app    - %(levelname)s - %(message)s'
+            )
+            handler.setFormatter(formatter)
+            cherrypy.log.error_log.addHandler(handler)
         # if file, we keep the default
         elif error_handler == 'file':
             pass
@@ -338,6 +330,7 @@ class LdapCherry(object):
         cherrypy.log.error_log.setLevel(level)
 
         if debug:
+            cherrypy.log.error_log.handlers = []
             handler = logging.StreamHandler(sys.stderr)
             handler.setLevel(logging.DEBUG)
             cherrypy.log.error_log.addHandler(handler)
@@ -387,7 +380,8 @@ class LdapCherry(object):
         )
         # preload templates
         self.temp_lookup = lookup.TemplateLookup(
-            directories=self.template_dir, input_encoding='utf-8'
+            directories=self.template_dir, input_encoding='utf-8',
+            default_filters=['unicode', 'h']
             )
         # load each template
         self.temp = {}
@@ -573,7 +567,7 @@ class LdapCherry(object):
 
     def _check_auth(self, must_admin, redir_login=True):
         """ check if a user is autheticated and, optionnaly an administrator
-        if user not authentifaced -> redirection to login page (with base64
+        if user not authenticated -> redirect to login page (with escaped URL
             of the originaly requested page (redirection after login)
         if user authenticated, not admin and must_admin enabled -> 403 error
         @boolean must_admin: flag "user must be an administrator to access
@@ -588,13 +582,13 @@ class LdapCherry(object):
             qs = ''
         else:
             qs = '?' + cherrypy.request.query_string
-        # base64 of the requested URL
-        b64requrl = base64.b64encode(cherrypy.url() + qs)
+        # Escaped version of the requested URL
+        quoted_requrl = quote_plus(cherrypy.url() + qs)
         if not username:
-            # return to login page (with base64 of the url in query string
+            # return to login page (with quoted url in query string)
             if redir_login:
                 raise cherrypy.HTTPRedirect(
-                    "/signin?url=%(url)s" % {'url': b64requrl},
+                    "/signin?url=%(url)s" % {'url': quoted_requrl},
                     )
             else:
                 raise cherrypy.HTTPError(
@@ -606,7 +600,7 @@ class LdapCherry(object):
                 or not cherrypy.session['connected']:
             if redir_login:
                 raise cherrypy.HTTPRedirect(
-                    "/signin?url=%(url)s" % {'url': b64requrl},
+                    "/signin?url=%(url)s" % {'url': quoted_requrl},
                     )
             else:
                 raise cherrypy.HTTPError(
@@ -631,7 +625,7 @@ class LdapCherry(object):
         else:
             if redir_login:
                 raise cherrypy.HTTPRedirect(
-                    "/signin?url=%(url)s" % {'url': b64requrl},
+                    "/signin?url=%(url)s" % {'url': quoted_requrl},
                     )
             else:
                 raise cherrypy.HTTPError(
@@ -671,6 +665,7 @@ class LdapCherry(object):
                 self._add_notification(
                     'User already exists in backend "' + b + '"'
                     )
+                return
         if not added:
             raise e
 
@@ -694,7 +689,7 @@ class LdapCherry(object):
                 roles.append(r)
         groups = self.roles.get_groups(roles)
         for b in groups:
-            self.backends[b].add_to_groups(username, Set(groups[b]))
+            self.backends[b].add_to_groups(username, set(groups[b]))
 
         cherrypy.log.error(
             msg="user '" + username + "' made member of " +
@@ -822,10 +817,10 @@ class LdapCherry(object):
                 if b not in g:
                     g[b] = []
             tmp = \
-                Set(groups_add[b]) - \
-                Set(groups_keep[b]) - \
-                Set(groups_current[b]) - \
-                Set(lonely_groups[b])
+                set(groups_add[b]) - \
+                set(groups_keep[b]) - \
+                set(groups_current[b]) - \
+                set(lonely_groups[b])
             cherrypy.log.error(
                 msg="user '" + username + "' added to groups: " +
                     str(list(tmp)) + " in backend '" + b + "'",
@@ -839,11 +834,11 @@ class LdapCherry(object):
                     g[b] = []
             tmp = \
                 (
-                    (Set(groups_rm[b]) | Set(groups_remove[b])) -
-                    (Set(groups_keep[b]) | Set(groups_add[b]))
+                    (set(groups_rm[b]) | set(groups_remove[b])) -
+                    (set(groups_keep[b]) | set(groups_add[b]))
                 ) & \
                 (
-                    Set(groups_current[b]) | Set(lonely_groups[b])
+                    set(groups_current[b]) | set(lonely_groups[b])
                 )
             cherrypy.log.error(
                 msg="user '" + username + "' removed from groups: " +
@@ -919,7 +914,7 @@ class LdapCherry(object):
             if url is None:
                 redirect = "/"
             else:
-                redirect = base64.b64decode(url)
+                redirect = url
             raise cherrypy.HTTPRedirect(redirect)
         else:
             message = "login failed for user '%(user)s'" % {
@@ -932,7 +927,7 @@ class LdapCherry(object):
             if url is None:
                 qs = ''
             else:
-                qs = '?url=' + url
+                qs = '?url=' + quote_plus(url)
             raise cherrypy.HTTPRedirect("/signin" + qs)
 
     @cherrypy.expose
@@ -969,7 +964,7 @@ class LdapCherry(object):
         return self.temp['index.tmpl'].render(
             is_admin=is_admin,
             attrs_list=attrs_list,
-            searchresult=self._escape(user_attrs, 'attr_list'),
+            searchresult=user_attrs,
             notifications=self._empty_notification(),
             )
 
@@ -985,7 +980,7 @@ class LdapCherry(object):
             res = None
         attrs_list = self.attributes.get_search_attributes()
         return self.temp['searchuser.tmpl'].render(
-            searchresult=self._escape(res, 'search_list'),
+            searchresult=res,
             attrs_list=attrs_list,
             is_admin=is_admin,
             custom_js=self.custom_js,
@@ -997,7 +992,7 @@ class LdapCherry(object):
     def checkppolicy(self, **params):
         """ search user page """
         self._check_auth(must_admin=False, redir_login=False)
-        keys = params.keys()
+        keys = list(params.keys())
         if len(keys) != 1:
             cherrypy.response.status = 400
             return "bad argument"
@@ -1022,7 +1017,7 @@ class LdapCherry(object):
             res = None
         attrs_list = self.attributes.get_search_attributes()
         return self.temp['searchadmin.tmpl'].render(
-            searchresult=self._escape(res, 'search_list'),
+            searchresult=res,
             attrs_list=attrs_list,
             is_admin=is_admin,
             custom_js=self.custom_js,
@@ -1085,7 +1080,7 @@ class LdapCherry(object):
         is_admin = self._check_admin()
         try:
             referer = cherrypy.request.headers['Referer']
-        except:
+        except Exception as e:
             referer = '/'
         self._deleteuser(user)
         self._add_notification('User Deleted')
@@ -1104,7 +1099,7 @@ class LdapCherry(object):
             self._add_notification("User modified")
             try:
                 referer = cherrypy.request.headers['Referer']
-            except:
+            except Exception as e:
                 referer = '/'
             raise cherrypy.HTTPRedirect(referer)
 
@@ -1143,7 +1138,7 @@ class LdapCherry(object):
         try:
             form = self.temp['form.tmpl'].render(
                 attributes=self.attributes.attributes,
-                values=self._escape(user_attrs, 'attr_list'),
+                values=user_attrs,
                 modify=True,
                 keyattr=key,
                 autofill=False
@@ -1161,10 +1156,7 @@ class LdapCherry(object):
                 form=form,
                 roles=roles,
                 is_admin=is_admin,
-                standalone_groups=self._escape(
-                    standalone_groups,
-                    'lonely_groups'
-                    ),
+                standalone_groups=standalone_groups,
                 backends_display_names=self.backends_display_names,
                 custom_js=self.custom_js,
                 notifications=self._empty_notification(),
@@ -1178,7 +1170,7 @@ class LdapCherry(object):
 
     @cherrypy.expose
     @exception_decorator
-    def default(self, attr='', **params):
+    def default(self, attr='', *args, **params):
         cherrypy.response.status = 404
         self._check_auth(must_admin=False)
         is_admin = self._check_admin()
@@ -1219,7 +1211,7 @@ class LdapCherry(object):
 
             form = self.temp['form.tmpl'].render(
                 attributes=self.attributes.get_selfattributes(),
-                values=self._escape(user_attrs, 'attr_list'),
+                values=user_attrs,
                 modify=True,
                 autofill=False
                 )

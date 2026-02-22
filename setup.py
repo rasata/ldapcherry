@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # vim:set expandtab tabstop=4 shiftwidth=4:
 
@@ -23,14 +23,18 @@ from version import version
 # change requirements according to python version
 if sys.version_info[0] == 2:
     install_requires = [
-        'CherryPy >= 3.0.0',
+        'CherryPy >= 3.0.0,< 18.0.0',
         'python-ldap',
         'PyYAML',
         'Mako'
         ],
 elif sys.version_info[0] == 3:
-    print('unsupported version')
-    exit(1)
+    install_requires = [
+        'CherryPy >= 3.0.0',
+        'python-ldap',
+        'PyYAML',
+        'Mako'
+        ],
 else:
     print('unsupported version')
     exit(1)
@@ -120,16 +124,18 @@ setup(
         'ldapcherry.ppolicy'
         ],
     data_files=resources_files,
-    scripts=['scripts/ldapcherryd'],
+    entry_points = {
+        'console_scripts': ['ldapcherryd = ldapcherry.cli:main']
+    },
     url='https://github.com/kakwa/ldapcherry',
     license=license,
     description=small_description,
     long_description=description,
     install_requires=install_requires,
-    tests_require=['pytest', 'pep8'],
+    tests_require=['pytest', 'pep8', 'pytidylib'],
     cmdclass={'test': PyTest},
     classifiers=[
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 5 - Production/Stable',
         'Environment :: Web Environment',
         'Framework :: CherryPy',
         'Intended Audience :: System Administrators',

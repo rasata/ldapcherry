@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from __future__ import with_statement
@@ -9,7 +9,6 @@ import subprocess
 from tempfile import NamedTemporaryFile as tempfile
 import re
 
-from sets import Set
 from ldapcherry import LdapCherry
 from ldapcherry.exceptions import *
 from ldapcherry.pyyamlwrapper import DumplicatedKey, RelationError
@@ -21,6 +20,9 @@ import logging
 from ldapcherry.lclogging import *
 from disable import *
 import json
+from tidylib import tidy_document
+if sys.version < '3':
+    from sets import Set as set
 
 cherrypy.session = {}
 
@@ -78,19 +80,42 @@ class HtmlValidationFailed(Exception):
     def __init__(self, out):
         self.errors = out
 
+def _is_html_error(line):
+    for p in [
+                r'.*Warning: trimming empty <span>.*',
+                r'.*Error: <nav> is not recognized!.*',
+                r'.*Warning: discarding unexpected <nav>.*',
+                r'.*Warning: discarding unexpected </nav>.*',
+                r'.*Warning: <meta> proprietary attribute "charset".*',
+                r'.*Warning: <meta> lacks "content" attribute.*',
+                r'.*Warning: <link> inserting "type" attribute.*',
+                r'.*Warning: <link> proprietary attribute.*',
+                r'.*Warning: <input> proprietary attribute.*',
+                r'.*Warning: <button> proprietary attribute.*',
+                r'.*Warning: <form> proprietary attribute.*',
+                r'.*Warning: <table> lacks "summary" attribute.*',
+                r'.*Warning: <script> inserting "type" attribute.*',
+                r'.*Warning: <input> attribute "id" has invalid value.*',
+                r'.*Warning: <a> proprietary attribute.*',
+                r'.*Warning: <input> attribute "type" has invalid value.*',
+                r'.*Warning: <span> proprietary attribute.*',
+             ]:
+        if re.match(p, line):
+            return False
+    return True
+
 def htmlvalidator(page):
+    document, errors = tidy_document(page,
+        options={'numeric-entities':1})
     f = tempfile()
-    stdout = tempfile()
-    f.write(page.encode("utf-8"))
-    f.seek(0)
-    ret = subprocess.call(['./tests/html_validator.py', '-h', f.name], stdout=stdout)
-    stdout.seek(0)
-    out = stdout.read()
-    f.close()
-    stdout.close()
-    print(out)
-    if not re.search(r'Error:.*', out) is None:
-        raise HtmlValidationFailed(out)
+    for line in errors.splitlines():
+        if _is_html_error(line):
+            print("################")
+            print("Blocking error: '%s'" % line)
+            print("all tidy_document errors:")
+            print(errors)
+            print("################")
+            raise HtmlValidationFailed(line)
 
 class BadModule():
     pass
@@ -127,7 +152,7 @@ class TestError(object):
     def testLog(self):
         app = LdapCherry()
         cfg = { 'global' : {}}
-        for t in ['none', 'file', 'syslog']:
+        for t in ['none', 'file', 'syslog', 'stdout']:
             cfg['global']['log.access_handler']=t
             cfg['global']['log.error_handler']=t
             app._set_access_log(cfg, logging.DEBUG)
@@ -184,7 +209,7 @@ class TestError(object):
             app.login(u'jwatsoné', u'passwordwatsoné')
         except cherrypy.HTTPRedirect as e:
             expected = 'http://127.0.0.1:8080/'
-            assert e[0][0] == expected
+            assert e.urls[0] == expected
         else:
             raise AssertionError("expected an exception")
 
@@ -196,7 +221,7 @@ class TestError(object):
             app.login(u'jwatsoné', u'wrongPasswordé')
         except cherrypy.HTTPRedirect as e:
             expected = 'http://127.0.0.1:8080/signin'
-            assert e[0][0] == expected
+            assert e.urls[0] == expected
         else:
             raise AssertionError("expected an exception")
 
@@ -337,7 +362,7 @@ class TestError(object):
         app = LdapCherry()
         loadconf('./tests/cfg/ldapcherry_adldap.cfg', app)
         inv = ldapcherry.backend.backendAD.Backend(adcfg, cherrypy.log, u'test☭', adattr, 'sAMAccountName')
-	try:
+        try:
             app._deleteuser(u'☭default_user')
         except:
             pass
@@ -360,4 +385,3 @@ class TestError(object):
         get_loglevel('alert') is logging.CRITICAL and \
         get_loglevel('emergency') is logging.CRITICAL and \
         get_loglevel('notalevel') is logging.INFO
-

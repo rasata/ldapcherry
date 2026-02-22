@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # vim:set expandtab tabstop=4 shiftwidth=4:
 # The MIT License (MIT)
@@ -95,14 +95,14 @@ def start(configfile=None, daemonize=False, environment=None,
     # Always start the engine; this will start all other services
     try:
         engine.start()
-    except:
+    except Exception as e:
         # Assume the error has been logged already via bus.log.
         sys.exit(1)
     else:
         engine.block()
 
 
-if __name__ == '__main__':
+def main():
     from optparse import OptionParser
 
     p = OptionParser()
@@ -142,3 +142,7 @@ if __name__ == '__main__':
     start(options.config, options.daemonize,
           options.environment, options.fastcgi, options.scgi,
           options.pidfile, options.cgi, options.debug)
+
+
+if __name__ == '__main__':
+    main()

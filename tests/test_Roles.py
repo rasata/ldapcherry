@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from __future__ import with_statement
@@ -6,16 +6,17 @@ from __future__ import unicode_literals
 
 import pytest
 import sys
-from sets import Set
 from ldapcherry.roles import Roles
 from ldapcherry.exceptions import DumplicateRoleKey, MissingKey, DumplicateRoleContent, MissingRolesFile, MissingRole
 from ldapcherry.pyyamlwrapper import DumplicatedKey, RelationError
+if sys.version < '3':
+    from sets import Set as set
 
 class TestError(object):
 
     def testNominal(self):
         inv = Roles('./tests/cfg/roles.yml')
-        print inv.roles
+        print(inv.roles)
         return True
 
     def testMissingDisplayName(self):
@@ -64,7 +65,7 @@ class TestError(object):
                 ['admin-lv2', 'admin-lv3', 'users'],
                 ['admin-lv2']
         )
-        expected = {'ad': Set(['Administrators', 'Domain Controllers']), 'ldap': Set(['cn=nagios admins,ou=group,dc=example,dc=com', 'cn=puppet admins,ou=group,dc=example,dc=com', 'cn=dns admins,ou=group,dc=example,dc=com'])}
+        expected = {'ad': set(['Administrators', 'Domain Controllers']), 'ldap': set(['cn=nagios admins,ou=group,dc=example,dc=com', 'cn=puppet admins,ou=group,dc=example,dc=com', 'cn=dns admins,ou=group,dc=example,dc=com'])}
         assert groups == expected
 
     def testGetGroup(self):
@@ -78,7 +79,50 @@ class TestError(object):
 
     def testNested(self):
         inv = Roles('./tests/cfg/nested.yml')
-        expected = {'developpers': {'backends_groups': {'ad': ['Domain Users'], 'ldap': ['cn=developpers,ou=group,dc=example,dc=com', 'cn=users,ou=group,dc=example,dc=com']}, 'display_name': 'Developpers', 'description': 'description'}, 'admin-lv3': {'backends_groups': {'ad': ['Domain Users', 'Administrators', 'Domain Controllers'], 'ldap': ['cn=nagios admins,ou=group,dc=example,dc=com', 'cn=users,ou=group,dc=example,dc=com', 'cn=puppet admins,ou=group,dc=example,dc=com', 'cn=dns admins,ou=group,dc=example,dc=com']}, 'display_name': 'Administrators Level 3', 'description': 'description'}, 'admin-lv2': {'backends_groups': {'ad': ['Domain Users'], 'ldap': ['cn=nagios admins,ou=group,dc=example,dc=com', 'cn=users,ou=group,dc=example,dc=com']}, 'display_name': 'Administrators Level 2', 'description': 'description', 'LC_admins': True}, 'users': {'backends_groups': {'ad': ['Domain Users'], 'ldap': ['cn=users,ou=group,dc=example,dc=com']}, 'display_name': 'Simple Users', 'description': 'description'}}
+        expected = {
+            'admin-lv2': {
+                'LC_admins': True,
+                'backends_groups': {
+                    'ad': ['Domain Users'],
+                     'ldap': ['cn=nagios '
+                              'admins,ou=group,dc=example,dc=com',
+                              'cn=users,ou=group,dc=example,dc=com']
+                },
+                'description': 'description',
+                'display_name': 'Administrators Level 2'
+            },
+            'admin-lv3': {
+                'backends_groups': {
+                    'ad': ['Administrators',
+                           'Domain Controllers',
+                           'Domain Users'],
+                    'ldap': ['cn=dns '
+                             'admins,ou=group,dc=example,dc=com',
+                             'cn=nagios '
+                             'admins,ou=group,dc=example,dc=com',
+                             'cn=puppet '
+                             'admins,ou=group,dc=example,dc=com',
+                             'cn=users,ou=group,dc=example,dc=com']
+                    },
+                'description': 'description',
+                'display_name': 'Administrators Level 3'
+            },
+            'developers': {
+                'backends_groups': {
+                    'ad': ['Domain Users'],
+                    'ldap': ['cn=developers,ou=group,dc=example,dc=com',
+                             'cn=users,ou=group,dc=example,dc=com']},
+                'description': 'description',
+                'display_name': 'Developpers'
+            },
+            'users': {
+                'backends_groups': {
+                    'ad': ['Domain Users'],
+                    'ldap': ['cn=users,ou=group,dc=example,dc=com']},
+            'description': 'description',
+            'display_name': 'Simple Users'
+            }
+        }
         assert expected == inv.flatten
 
     def testGetGroupMissingRole(self):
@@ -108,13 +152,13 @@ class TestError(object):
     def testGetAllRoles(self):
         inv = Roles('./tests/cfg/roles.yml')
         res = inv.get_allroles()
-        expected = ['developpers', 'admin-lv3', 'admin-lv2', 'users']
+        expected = ['developers', 'admin-lv3', 'admin-lv2', 'users']
         assert res == expected
 
     def testGetAllRoles(self):
         inv = Roles('./tests/cfg/roles.yml')
         res = inv.get_backends()
-        expected = Set(['ad', 'ldap'])
+        expected = set(['ad', 'ldap'])
         assert res == expected
 
     def testDumpNested(self):
@@ -143,9 +187,9 @@ class TestError(object):
         'ad' : ['Domain Users', 'Domain Users 2'],
         'ldap': ['cn=users,ou=group,dc=example,dc=com',
             'cn=nagios admins,ou=group,dc=example,dc=com',
-            'cn=developpers,ou=group,dc=example,dc=com',
+            'cn=developers,ou=group,dc=example,dc=com',
             ],
         'toto': ['not a group'],
         }
-        expected = {'unusedgroups': {'toto': Set(['not a group']), 'ad': Set(['Domain Users 2'])}, 'roles': Set(['developpers', 'admin-lv2', 'users'])}
+        expected = {'unusedgroups': {'toto': set(['not a group']), 'ad': set(['Domain Users 2'])}, 'roles': set(['developers', 'admin-lv2', 'users'])}
         assert inv.get_roles(groups) == expected

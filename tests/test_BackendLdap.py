@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from __future__ import with_statement
@@ -6,13 +6,14 @@ from __future__ import unicode_literals
 
 import pytest
 import sys
-from sets import Set
 from ldapcherry.backend.backendLdap import Backend, CaFileDontExist
 from ldapcherry.exceptions import *
 from disable import travis_disabled
 import cherrypy
 import logging
 import ldap
+if sys.version < '3':
+    from sets import Set as set
 
 cfg = {
 'module'             : 'ldapcherry.backend.ldap',
@@ -104,7 +105,8 @@ class TestError(object):
         try:
             ldapc.simple_bind_s(inv.binddn, inv.bindpassword)
         except ldap.SERVER_DOWN as e:
-            assert e[0]['info'] == 'TLS: hostname does not match CN in peer certificate'
+            assert e.args[0]['info'] == 'TLS: hostname does not match CN in peer certificate' or \
+                    e.args[0]['info'] == '(unknown error code)'
         else:
             raise AssertionError("expected an exception")
 
@@ -148,7 +150,6 @@ class TestError(object):
         ]
         inv.add_to_groups(u'jwatsoné', groups)
         ret = inv.get_groups(u'jwatsoné')
-        print ret
         inv.del_from_groups(u'jwatsoné', ['cn=hrpeople,ou=Groups,dc=example,dc=org'])
         inv.del_from_groups(u'jwatsoné', ['cn=hrpeople,ou=Groups,dc=example,dc=org'])
         assert ret == ['cn=itpeople,ou=Groups,dc=example,dc=org', 'cn=hrpeople,ou=Groups,dc=example,dc=org']

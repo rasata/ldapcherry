@@ -1,33 +1,28 @@
 admin-lv3:
     display_name: Administrators Level 3
-    description: Super administrators of the system
+    description: description
     backends_groups:
         ldap:
             - cn=dns admins,ou=Group,dc=example,dc=org
             - cn=nagios admins,ou=Group,dc=example,dc=org
             - cn=puppet admins,ou=Group,dc=example,dc=org
             - cn=users,ou=Group,dc=example,dc=org
-#        ad:
-#            - Administrators
-#            - Group Policy Creator Owners
-#            - Enterprise Admins
-#            - Schema Admins
-#            - Domain Admins
+        ad:
+            - Administrators
+            - Domain Controllers 
 
 admin-lv2:
     display_name: Administrators Level 2
-    description: Basic administrators of the system
+    description: description
     LC_admins: True
     backends_groups:
         ldap:
             - cn=nagios admins,ou=Group,dc=example,dc=org
             - cn=users,ou=Group,dc=example,dc=org
-#        ad:
-#            - Administrators
 
 developers:
     display_name: Developpers
-    description: Developpers of the system
+    description: description
     backends_groups:
         ldap:
             - cn=developers,ou=Group,dc=example,dc=org
@@ -35,7 +30,7 @@ developers:
 
 users:
     display_name: Simple Users
-    description: Basic users of the system
+    description: description
     backends_groups:
         ldap:
             - cn=users,ou=Group,dc=example,dc=org

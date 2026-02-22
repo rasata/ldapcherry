@@ -112,7 +112,12 @@ If **type** is set to **stringlist** the parameter **values** must be filled wit
 Key attribute:
 ^^^^^^^^^^^^^^
 
-One attribute must be used as a unique key across all backends:
+One attribute must be used as a unique key across all backends.
+
+It acts as a reconciliation key.
+
+It also marks which attribute must be used within ldapcherry (ex: querysting parameter in links)
+to point to one given user.
 
 To set the key attribute, you must set **key** to **True** on this attribute.
 
@@ -445,16 +450,16 @@ Logging
 
 LdapCherry has two loggers, one for errors and applicative actions (login, del/add, logout...) and one for access logs.
 
-Each logger can be configured to log to syslog, file or be disabled. 
+Each logger can be configured to log to **syslog**, **file**, **stdout** or be disabled.
 
 Logging parameters:
 
 +--------------------+---------+---------------------------------+-------------------------------------------------+----------------------------------------+
 |      Parameter     | Section |           Description           |                      Values                     |                 Comment                |
 +====================+=========+=================================+=================================================+========================================+
-| log.access_handler |  global |    Logger type for access log   |            'syslog', 'file', 'none'             |                                        |
+| log.access_handler |  global |    Logger type for access log   |      'syslog', 'file', 'stdout', 'none'         |                                        |
 +--------------------+---------+---------------------------------+-------------------------------------------------+----------------------------------------+
-|  log.error_handler |  global | Logger type for applicative log |             'syslog', 'file', 'none'            |                                        |
+|  log.error_handler |  global | Logger type for applicative log |      'syslog', 'file', 'stdout', 'none'         |                                        |
 +--------------------+---------+---------------------------------+-------------------------------------------------+----------------------------------------+
 |   log.access_file  |  global |     log file for access log     |                 path to log file                | only used if log.access_handler='file' |
 +--------------------+---------+---------------------------------+-------------------------------------------------+----------------------------------------+
@@ -476,6 +481,14 @@ Example:
     # log level
     log.level = 'info'
 
+
+.. warning::
+
+   'debug' should not be used in production.
+
+   It tends to log a lot.
+   More significantly can represent a security issue,
+   as things like passwords will be logged 'clear text'.
 
 Custom javascript
 ~~~~~~~~~~~~~~~~~

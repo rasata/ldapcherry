@@ -1,19 +1,27 @@
 #!/bin/sh
 
-DEBIAN_FRONTEND=noninteractive apt-get install ldap-utils slapd -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"  -f -q -y
-DEBIAN_FRONTEND=noninteractive apt-get install samba -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"  -f -q -y
-DEBIAN_FRONTEND=noninteractive apt-get install winbind -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"  -f -q -y
+apt update
 
-rsync -a `dirname $0`/ /
+DEBIAN_FRONTEND=noninteractive apt-get install ldap-utils slapd -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"  -f -q -y
+DEBIAN_FRONTEND=noninteractive apt-get install samba-dsdb-modules samba-vfs-modules samba -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"  -f -q -y
+DEBIAN_FRONTEND=noninteractive apt-get install winbind -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"  -f -q -y
+DEBIAN_FRONTEND=noninteractive apt-get install build-essential python3-dev libsasl2-dev slapd ldap-utils tox lcov valgrind libtidy-dev libldap-dev python3-cherrypy3 python3-ldap python3-mako -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"  -f -q -y
+
+[ -e '/etc/default/slapd' ] && rm -rf /etc/default/slapd
+cp -r `dirname $0`/etc/default/slapd /etc/default/slapd
+[ -e '/etc/ldap' ] && rm -rf /etc/ldap
+cp -r `dirname $0`/etc/ldap /etc/ldap
+[ -e '/etc/ldapcherry' ] && rm -rf /etc/ldapcherry
+cp -r `dirname $0`/etc/ldapcherry /etc/ldapcherry
+
 cd `dirname $0`/../../
 sudo sed -i "s%template_dir.*%template_dir = '`pwd`/resources/templates/'%" /etc/ldapcherry/ldapcherry.ini
 sudo sed -i "s%tools.staticdir.dir.*%tools.staticdir.dir = '`pwd`/resources/static/'%" /etc/ldapcherry/ldapcherry.ini
 
 chown -R openldap:openldap /etc/ldap/
-rm /etc/ldap/slapd.d/cn\=config/*mdb*
 /etc/init.d/slapd restart
 ldapadd -c -H ldap://localhost:390  -x -D "cn=admin,dc=example,dc=org" -f /etc/ldap/content.ldif -w password
-if grep -q '127.0.0.1' /etc/hosts
+if grep -q '127.0.0.1' /etc/hosts && ! grep -q 'ldap.ldapcherry.org' /etc/hosts
 then
     sed -i "s/\(127.0.0.1.*\)/\1 ldap.ldapcherry.org ad.ldapcherry.org ldap.dnscherry.org/" /etc/hosts
 else
@@ -23,11 +31,6 @@ cat /etc/hosts
 
 
 df -h
-
-/etc/init.d/samba stop 
-/etc/init.d/smbd stop
-/etc/init.d/nmbd stop 
-/etc/init.d/samba-ad-dc stop
 
 find /var/log/samba/ -type f -exec rm -f {} \;
 
@@ -40,9 +43,11 @@ role=dc
 sambacmd=samba-tool
 adpass=qwertyP455
 
+systemctl unmask samba-ad-dc
+
 hostname ad.ldapcherry.org 
-/etc/init.d/dnsmasq stop
 pkill -9 dnsmasq
+pkill -9 samba
 
 kill -9 `cat /var/run/samba/smbd.pid` 
 rm -f /var/run/samba/smbd.pid
@@ -65,12 +70,16 @@ cat ${smbconffile}
 
 mv /var/lib/samba/private/krb5.conf /etc/krb5.conf
 
-sleep 5
+sleep 15
 
-/etc/init.d/samba-ad-dc start
+systemctl restart samba-ad-dc
+/etc/init.d/samba-ad-dc restart
 
 cat /var/log/samba/*
 
 sleep 5
 
-netstat -apn | grep samba
+samba-tool domain passwordsettings set -d 1 --complexity off
+samba-tool domain passwordsettings set -d 1 --min-pwd-length 0
+systemctl status samba-ad-dc
+ss -apn | grep samba
